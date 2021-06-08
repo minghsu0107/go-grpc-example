@@ -1,10 +1,12 @@
 # Go gRPC Tutorial
 A repository that demonstrates Golang gRPC usages with hands-on examples. We will cover the following content:
-- Greeting Service
-- Calculator Service
-- Unary, Server Streaming, Client Streaming, Bi Streaming
-- Error Handling, Deadlines, SSL Encryption
-- Blog API CRUD with MongoDB
+- Greeting service 
+  - Unary call, server streaming, client streaming, and bidirectional streaming 
+  - Deadlines and SSL encryption
+- Calculator service
+  - Error handling
+- Blog service
+  - CRUD API with MongoDB
 ### Installation
 You should have `protoc` binary installed:
 ```bash
