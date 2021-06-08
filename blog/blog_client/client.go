@@ -24,8 +24,9 @@ func main() {
 
 	c := blogpb.NewBlogServiceClient(cc)
 
-	// create Blog
+	// create blog
 	fmt.Println("Creating the blog")
+
 	blog := &blogpb.Blog{
 		AuthorId: "Stephane",
 		Title:    "My First Blog",
@@ -34,15 +35,15 @@ func main() {
 	}
 	createBlogRes, err := c.CreateBlog(context.Background(), &blogpb.CreateBlogRequest{Blog: blog})
 	if err != nil {
-		log.Fatalf("Unexpected error: %v", err)
+		log.Printf("Unexpected error: %v\n", err)
 	}
-	fmt.Printf("Blog has been created: %v", createBlogRes)
+	fmt.Printf("Blog has been created: %v\n", createBlogRes)
 	blogID := createBlogRes.GetBlog().GetId()
 
-	// read Blog
+	// read blog
 	fmt.Println("Reading the blog")
 
-	_, err2 := c.ReadBlog(context.Background(), &blogpb.ReadBlogRequest{BlogId: "5bdc29e661b75adcac496cf4"})
+	_, err2 := c.ReadBlog(context.Background(), &blogpb.ReadBlogRequest{BlogId: blogID})
 	if err2 != nil {
 		fmt.Printf("Error happened while reading: %v \n", err2)
 	}
@@ -55,7 +56,9 @@ func main() {
 
 	fmt.Printf("Blog was read: %v \n", readBlogRes)
 
-	// update Blog
+	// update blog
+	fmt.Println("Updating the blog")
+
 	newBlog := &blogpb.Blog{
 		Id:       blogID,
 		AuthorId: "Changed Author",
@@ -69,10 +72,12 @@ func main() {
 	}
 	fmt.Printf("Blog was updated: %v\n", updateRes)
 
-	// list Blogs
+	// list blogs
+	fmt.Println("Listing the blog")
+
 	stream, err := c.ListBlog(context.Background(), &blogpb.ListBlogRequest{})
 	if err != nil {
-		log.Fatalf("error while calling ListBlog RPC: %v", err)
+		log.Printf("error while calling ListBlog RPC: %v\n", err)
 	}
 	for {
 		res, err := stream.Recv()
@@ -80,22 +85,26 @@ func main() {
 			break
 		}
 		if err != nil {
-			log.Fatalf("Something happened: %v", err)
+			log.Printf("Something happened: %v\n", err)
 		}
-		fmt.Println(res.GetBlog())
+		fmt.Println("listed blog: ", res.GetBlog())
 	}
 
-	// list blog repeat
-	listRepeatRes, err := c.ListBlogRepeat(context.Background(), &blogpb.ListBlogRepeatRequest{
+	// list blog page
+	fmt.Println("Listing the blog page")
+
+	listPageRes, err := c.ListBlogPage(context.Background(), &blogpb.ListBlogPageRequest{
 		Skip:  0,
 		Limit: 1,
 	})
 	if err != nil {
-		log.Fatalf("error while calling ListBlogRepeat RPC: %v", err)
+		log.Printf("error while calling ListBlogPage RPC: %v\n", err)
 	}
-	fmt.Println(listRepeatRes.GetBlogs())
+	fmt.Println(listPageRes.GetBlogs())
 
 	// delete Blog
+	fmt.Println("Deleting the blog")
+
 	deleteRes, deleteErr := c.DeleteBlog(context.Background(), &blogpb.DeleteBlogRequest{BlogId: blogID})
 
 	if deleteErr != nil {

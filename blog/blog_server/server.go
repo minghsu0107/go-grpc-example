@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -17,10 +18,13 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
-	"gopkg.in/mgo.v2/bson"
 )
 
-var collection *mongo.Collection
+var (
+	collection *mongo.Collection
+
+	articleTitleIdx = "article:title"
+)
 
 type server struct {
 }
@@ -44,8 +48,8 @@ func (*server) CreateBlog(ctx context.Context, req *blogpb.CreateBlogRequest) (*
 		Tags:     blog.GetTags(),
 	}
 
-	res, err := collection.InsertMany(context.Background(), []interface{}{data})
-	//res, err := collection.InsertOne(context.Background(), data)
+	res, err := collection.InsertMany(ctx, []interface{}{data})
+	//res, err := collection.InsertOne(ctx, data)
 	if err != nil {
 		return nil, status.Errorf(
 			codes.Internal,
@@ -57,7 +61,7 @@ func (*server) CreateBlog(ctx context.Context, req *blogpb.CreateBlogRequest) (*
 	if !ok {
 		return nil, status.Errorf(
 			codes.Internal,
-			fmt.Sprintf("Cannot convert to OID"),
+			"Cannot convert to OID",
 		)
 	}
 
@@ -81,7 +85,7 @@ func (*server) ReadBlog(ctx context.Context, req *blogpb.ReadBlogRequest) (*blog
 	if err != nil {
 		return nil, status.Errorf(
 			codes.InvalidArgument,
-			fmt.Sprintf("Cannot parse ID"),
+			"Cannot parse ID",
 		)
 	}
 
@@ -91,7 +95,7 @@ func (*server) ReadBlog(ctx context.Context, req *blogpb.ReadBlogRequest) (*blog
 	// regex example
 	// {"username" : {$regex : ".*son.*"}} // contains "son" in the username
 
-	res := collection.FindOne(context.Background(), filter)
+	res := collection.FindOne(ctx, filter)
 	if err := res.Decode(data); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, status.Errorf(
@@ -127,7 +131,7 @@ func (*server) UpdateBlog(ctx context.Context, req *blogpb.UpdateBlogRequest) (*
 	if err != nil {
 		return nil, status.Errorf(
 			codes.InvalidArgument,
-			fmt.Sprintf("Cannot parse ID"),
+			"Cannot parse ID",
 		)
 	}
 
@@ -143,7 +147,7 @@ func (*server) UpdateBlog(ctx context.Context, req *blogpb.UpdateBlogRequest) (*
 	data.Tags = blog.GetTags()
 
 	res, updateErr := collection.UpdateOne(
-		context.Background(),
+		ctx,
 		filter,
 		bson.M{
 			"$set": bson.M{
@@ -153,8 +157,9 @@ func (*server) UpdateBlog(ctx context.Context, req *blogpb.UpdateBlogRequest) (*
 				"tags":      data.Tags,
 			},
 		},
+		options.Update().SetUpsert(true),
 	)
-	//res, updateErr := collection.ReplaceOne(context.Background(), filter, data)
+	//res, updateErr := collection.ReplaceOne(ctx, filter, data)
 	if updateErr != nil {
 		return nil, status.Errorf(
 			codes.Internal,
@@ -182,13 +187,13 @@ func (*server) DeleteBlog(ctx context.Context, req *blogpb.DeleteBlogRequest) (*
 	if err != nil {
 		return nil, status.Errorf(
 			codes.InvalidArgument,
-			fmt.Sprintf("Cannot parse ID"),
+			"Cannot parse ID",
 		)
 	}
 
 	filter := bson.M{"_id": oid}
 
-	res, err := collection.DeleteOne(context.Background(), filter)
+	res, err := collection.DeleteOne(ctx, filter)
 
 	if err != nil {
 		return nil, status.Errorf(
@@ -241,9 +246,8 @@ func (*server) ListBlog(req *blogpb.ListBlogRequest, stream blogpb.BlogService_L
 	return nil
 }
 
-func (*server) ListBlogRepeat(ctx context.Context, req *blogpb.ListBlogRepeatRequest) (*blogpb.ListBlogRepeatResponse, error) {
-	fmt.Println("List blog repeat request")
-
+func (*server) ListBlogPage(ctx context.Context, req *blogpb.ListBlogPageRequest) (*blogpb.ListBlogPageResponse, error) {
+	fmt.Println("List blog page request")
 	findOptions := options.Find()
 	findOptions.SetSkip(req.GetSkip()).SetLimit(req.GetLimit()) // skip and limit default set to 0
 	// sorts the documents first by the author_id field in descending order
@@ -255,19 +259,12 @@ func (*server) ListBlogRepeat(ctx context.Context, req *blogpb.ListBlogRepeatReq
 	// The maximum number of documents to be included in each batch returned by the server
 	// default: 101
 	findOptions.SetBatchSize(200)
-	// force mongo cursor to use the index on author_id (the index should exist)
-	findOptions.SetHint(bson.M{
+	// select fields
+	findOptions.SetProjection(bson.M{
+		"_id":       1,
 		"author_id": 1,
+		"title":     1,
 	})
-	/*
-		// select fields
-		findOptions.SetProjection(bson.M{
-			"author_id": 1,
-			"content":   1,
-			"title":     1,
-			"tags":      0,
-		})
-	*/
 	/*
 		filter := primitive.D{
 			{
@@ -304,22 +301,22 @@ func (*server) ListBlogRepeat(ctx context.Context, req *blogpb.ListBlogRepeatReq
 			},
 			bson.M{
 				"title": bson.M{
-					"$in": primitive.A{"My Title", "My First Blog (edited)", 3},
+					"$in": primitive.A{"My Title", "My Second Title", 3},
 				},
 			},
 		},
 	}
-	cur, err := collection.Find(context.Background(), filter, findOptions)
+	cur, err := collection.Find(ctx, filter, findOptions)
 	if err != nil {
 		return nil, status.Errorf(
 			codes.Internal,
 			fmt.Sprintf("Unknown internal error: %v", err),
 		)
 	}
-	defer cur.Close(context.Background())
+	defer cur.Close(ctx)
 
-	var resp blogpb.ListBlogRepeatResponse
-	for cur.Next(context.Background()) {
+	var resp blogpb.ListBlogPageResponse
+	for cur.Next(ctx) {
 		data := &blogItem{}
 		err := cur.Decode(data)
 		if err != nil {
@@ -345,7 +342,6 @@ func main() {
 
 	fmt.Println("Connecting to MongoDB")
 	// connect to MongoDB
-	// eg. mongodb://user:pass@host1.example.com:27017/?authSource=admin,user:pass@host2.example.com:27017/?authSource=admin
 	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
 	if err != nil {
 		log.Fatal(err)
@@ -357,7 +353,7 @@ func main() {
 
 	fmt.Println("Blog Service Started")
 	collection = client.Database("mydb").Collection("blog")
-	collection.Indexes().CreateOne(
+	indexName, err := collection.Indexes().CreateOne(
 		context.Background(),
 		mongo.IndexModel{
 			// compound index
@@ -368,9 +364,13 @@ func main() {
 				"title": 1,
 			},
 			// set this index unique
-			Options: options.Index().SetUnique(true),
+			Options: options.Index().SetUnique(true).SetName(articleTitleIdx),
 		},
 	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("create index: ", indexName)
 	lis, err := net.Listen("tcp", "0.0.0.0:50051")
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
