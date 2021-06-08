@@ -345,7 +345,7 @@ func main() {
 
 	fmt.Println("Connecting to MongoDB")
 	// connect to MongoDB
-	// eg. mongodb://user:pass@host1.example.com:27017,user:pass@host2.example.com:27017
+	// eg. mongodb://user:pass@host1.example.com:27017/?authSource=admin,user:pass@host2.example.com:27017/?authSource=admin
 	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
 	if err != nil {
 		log.Fatal(err)
